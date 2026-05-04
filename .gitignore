@@ -1,0 +1,14 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+app.log
+*.db
+
+# Mac
+.DS_Store
+
+# Node 
+node_modules/
+build/
+.env
