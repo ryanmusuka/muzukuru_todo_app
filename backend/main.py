@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
@@ -25,6 +26,7 @@ logging.basicConfig(
 )
 
 app = FastAPI()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # CORS Configuration
 app.add_middleware(
@@ -90,12 +92,12 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
     return {"message": "User created successfully"}
 
 @app.post("/login", status_code=status.HTTP_200_OK)
-async def login(user: UserCreate, db: Session = Depends(get_db)):
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     # Query database for user
-    db_user = db.query(models.User).filter(models.User.username == user.username).first()
+    db_user = db.query(models.User).filter(models.User.username == form_data.username).first()
     
-    if not db_user or not verify_password(user.password, db_user.hashed_password):
-        logging.warning(f"Failed login attempt - User not found: {user.username}")
+    if not db_user or not verify_password(form_data.password, db_user.hashed_password):
+        logging.warning(f"Failed login attempt - User not found: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password"
@@ -108,8 +110,43 @@ async def login(user: UserCreate, db: Session = Depends(get_db)):
     }
     
     token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
-    logging.info(f"Successfully logged in user: {user.username}")
+    logging.info(f"Successfully logged in user: {form_data.username}")
     return {
         "access_token": token,
         "token_type": "bearer"
     }
+
+@app.get("/protected")
+async def get_protected_data(token: str = Depends(oauth2_scheme)):
+    try:
+        # Decode the token
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        
+        if username is None:
+            logging.error("Token verification failed: No username in payload")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials"
+            )
+            
+        # Log the successful access 
+        logging.info(f"Authorized access to /protected by user: {username}")
+        return {
+            "message": "Welcome to the protected route!",
+            "user": username,
+            "status": "Authenticated"
+        }
+
+    except jwt.ExpiredSignatureError:
+        logging.warning("Access denied: Token has expired")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired. Please log in again."
+        )
+    except jwt.InvalidTokenError:
+        logging.warning("Access denied: Invalid token signature")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token."
+        ) 
