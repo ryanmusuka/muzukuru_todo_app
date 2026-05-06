@@ -1,4 +1,8 @@
 import logging
+import os
+import jwt
+from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -7,7 +11,10 @@ from sqlalchemy.orm import Session
 import models
 from database import engine, SessionLocal
 
-# Initializing Database Tables
+# JWT Configuration
+load_dotenv()
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM", "HS256") 
 models.Base.metadata.create_all(bind=engine)
 
 # Logging
@@ -44,6 +51,9 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
 # Database Session Dependency
 def get_db():
     db = SessionLocal()
@@ -73,9 +83,33 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
     # Hash password and save to database
     hashed_password = get_password_hash(user.password)
     new_user = models.User(username=user.username, hashed_password=hashed_password)
-    
     db.add(new_user)
     db.commit()
     
     logging.info(f"Successfully registered user: {user.username}")
     return {"message": "User created successfully"}
+
+@app.post("/login", status_code=status.HTTP_200_OK)
+async def login(user: UserCreate, db: Session = Depends(get_db)):
+    # Query database for user
+    db_user = db.query(models.User).filter(models.User.username == user.username).first()
+    
+    if not db_user or not verify_password(user.password, db_user.hashed_password):
+        logging.warning(f"Failed login attempt - User not found: {user.username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password"
+        )
+    
+    #JWT Token Generation
+    token_data = {
+        "sub": db_user.username,
+        "exp": datetime.now(timezone.utc) + timedelta(hours=1) 
+    }
+    
+    token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
+    logging.info(f"Successfully logged in user: {user.username}")
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
