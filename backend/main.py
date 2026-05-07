@@ -106,8 +106,7 @@ class TodoResponse(BaseModel):
     class Config:
         from_attributes = True  # Allows Pydantic to read SQLAlchemy models
 
-# Endpoints
-
+# Login Endpoints
 @app.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(user: UserCreate, db: Session = Depends(get_db)):
     # Query database to check if user already exists
@@ -213,3 +212,44 @@ async def get_todos(current_user: models.User = Depends(get_current_user), db: S
     
     logging.info(f"Fetched {len(todos)} tasks for user '{current_user.username}'")
     return todos
+
+@app.put("/todos/{todo_id}", response_model=TodoResponse)
+async def toggle_todo(todo_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Toggles the completed status of a specific task."""
+    
+    # SECURITY: Find the task by ID *AND* verify the logged-in user owns it
+    todo = db.query(models.Todo).filter(
+        models.Todo.id == todo_id, 
+        models.Todo.owner_id == current_user.id
+    ).first()
+    
+    if not todo:
+        logging.warning(f"User '{current_user.username}' attempted to update an unauthorized or missing task (ID: {todo_id})")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found or unauthorized")
+    
+    # Toggle the boolean value (True becomes False, False becomes True)
+    todo.completed = not todo.completed
+    db.commit()
+    db.refresh(todo)
+    
+    logging.info(f"User '{current_user.username}' toggled task {todo_id} to {todo.completed}")
+    return todo
+
+@app.delete("/todos/{todo_id}", status_code=status.HTTP_200_OK)
+async def delete_todo(todo_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Deletes a specific task."""
+    
+    todo = db.query(models.Todo).filter(
+        models.Todo.id == todo_id, 
+        models.Todo.owner_id == current_user.id
+    ).first()
+    
+    if not todo:
+        logging.warning(f"User '{current_user.username}' attempted to delete an unauthorized or missing task (ID: {todo_id})")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found or unauthorized")
+        
+    db.delete(todo)
+    db.commit()
+    
+    logging.info(f"User '{current_user.username}' deleted task {todo_id}")
+    return {"message": "Task deleted successfully"}
