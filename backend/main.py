@@ -149,4 +149,4 @@ async def get_protected_data(token: str = Depends(oauth2_scheme)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token."
-        ) 
+        )
