@@ -1,32 +1,24 @@
-/**
- * Credentials for Registration and Login
- */
+// Credentials for Registration and Login
 export interface UserCredentials {
   username: string;
-  password?: string; // Optional for scenarios where only username is needed
+  password?: string; 
 }
 
-/**
- * Expected response from POST /register and POST /login
- */
+// Expected response from POST /register and POST /login
 export interface AuthResponse {
-  token?: string;    // Provided on successful login
-  message?: string;  // General status messages
-  error?: string;    // Error message for "Invalid credentials" or failed registration
+  token?: string;    
+  message?: string;  
+  error?: string;   
 }
 
-/**
- * Expected response from GET /protected verification
- */
+// Expected response from GET /protected verification
 export interface ProtectedResponse {
   message: string;
   user?: string;   
   status: 'success' | 'error';
 }
 
-/**
- * Basic To-Do Item structure for the protected route
- */
+// Basic To-Do Item structure for the protected route
 export interface Todo {
   id: string;
   task: string;
