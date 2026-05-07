@@ -64,12 +64,50 @@ def get_db():
     finally:
         db.close()
 
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials"
+            )
+    except Exception as e:
+        logging.warning(f"Token validation failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )
+    
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+    return user
+
+
 # Pydantic Schemas
 class UserCreate(BaseModel):
     username: str
     password: str = Field(..., max_length=50)
 
+class TodoCreate(BaseModel):
+    title: str
+
+class TodoResponse(BaseModel):
+    id: int
+    title: str
+    completed: bool
+    owner_id: int
+
+    class Config:
+        from_attributes = True  # Allows Pydantic to read SQLAlchemy models
+
 # Endpoints
+
 @app.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(user: UserCreate, db: Session = Depends(get_db)):
     # Query database to check if user already exists
@@ -118,6 +156,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
 
 @app.get("/protected")
 async def get_protected_data(token: str = Depends(oauth2_scheme)):
+
     try:
         # Decode the token
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -150,3 +189,27 @@ async def get_protected_data(token: str = Depends(oauth2_scheme)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token."
         )
+    
+# The To-Do Endpoints
+@app.post("/todos", response_model=TodoResponse, status_code=status.HTTP_201_CREATED)
+async def create_todo(todo: TodoCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Creates a new task linked to the logged-in user."""
+    new_todo = models.Todo(
+        title=todo.title, 
+        completed=False, 
+        owner_id=current_user.id
+    )
+    db.add(new_todo)
+    db.commit()
+    db.refresh(new_todo) 
+    
+    logging.info(f"User '{current_user.username}' created a new task: {todo.title}")
+    return new_todo
+
+@app.get("/todos", response_model=list[TodoResponse])
+async def get_todos(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Fetches all tasks belonging ONLY to the logged-in user."""
+    todos = db.query(models.Todo).filter(models.Todo.owner_id == current_user.id).all()
+    
+    logging.info(f"Fetched {len(todos)} tasks for user '{current_user.username}'")
+    return todos
