@@ -4,9 +4,22 @@ import { Search, Plus, X, Check, Trash2, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import type { Todo, FilterType, FilterPill } from '../types';
 
+const TodoSkeleton = () => (
+  <div className="flex items-center justify-between p-5 rounded-2xl border border-gray-100 bg-white">
+    <div className="flex-1 space-y-2">
+      <div className="h-4 bg-gray-200 rounded-md w-3/4 animate-shimmer" />
+    </div>
+    <div className="flex gap-2 ml-4">
+      <div className="w-9 h-9 bg-gray-100 rounded-xl animate-shimmer" />
+      <div className="w-9 h-9 bg-gray-100 rounded-xl animate-shimmer" />
+    </div>
+  </div>
+);
+
 const Dashboard = () => {
   const { token, logout } = useAuth();
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [filter, setFilter] = useState<FilterType>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -19,16 +32,18 @@ const Dashboard = () => {
     { id: 'completed', label: 'Completed', color: 'bg-green-100 text-green-600' }
   ];
 
-  // 1. GET - Fetch Todos (LIFO handled by reversing)
+  // 1. GET - Fetch Todos
   const fetchTodos = async () => {
     try {
       const res = await fetch('http://localhost:8000/todos', {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
-      setTodos(data.reverse()); // LIFO: Newest at the top
+      setTodos(data.reverse()); 
     } catch (err) {
       console.error("Fetch error:", err);
+    } finally {
+      setTimeout(() => setIsLoading(false), 400);
     }
   };
 
@@ -84,7 +99,7 @@ const Dashboard = () => {
     }
   };
 
-  // Local Search & Filter (O(1) perceived time)
+  // Local Search & Filter
   const filteredTodos = todos.filter(t => {
     const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase());
     if (filter === 'todo') return matchesSearch && !t.completed;
@@ -130,7 +145,6 @@ const Dashboard = () => {
       {filterPills.map((p) => (
         <button
           key={p.id}
-          // NO MORE 'as any' - TypeScript knows p.id is a FilterType
           onClick={() => setFilter(p.id)} 
           className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${
             filter === p.id ? p.color : 'bg-white border text-gray-500'
@@ -143,19 +157,22 @@ const Dashboard = () => {
 
       {/* TODO LIST */}
       <main className="max-w-3xl mx-auto px-6 mt-8 space-y-3">
-        {filteredTodos.map((todo) => (
-          <motion.div
-            layout
-            key={todo.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`flex items-center justify-between p-5 rounded-2xl border transition-colors ${
-              todo.completed ? 'bg-green-50/50 border-green-100' : 'bg-white border-gray-100'
-            }`}
-          >
-            <span className={`flex-1 font-medium ${todo.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
-              {todo.title}
-            </span>
+        {isLoading ? (
+          [...Array(5)].map((_, i) => <TodoSkeleton key={i} />)
+        ) : (
+          filteredTodos.map((todo) => (
+            <motion.div
+              layout
+              key={todo.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`flex items-center justify-between p-5 rounded-2xl border transition-colors ${
+                todo.completed ? 'bg-green-50/50 border-green-100' : 'bg-white border-gray-100'
+              }`}
+            >
+              <span className={`flex-1 font-medium ${todo.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                {todo.title}
+              </span>
             
             <div className="flex gap-2 ml-4">
               <button 
@@ -172,7 +189,13 @@ const Dashboard = () => {
               </button>
             </div>
           </motion.div>
-        ))}
+        )))}
+
+        {!isLoading && filteredTodos.length === 0 && (
+          <div className="text-center py-12 text-gray-400">
+            <p>No tasks found. Time to add some!</p>
+          </div>
+        )}
       </main>
 
       {/* FAB (Thumb Region) */}
