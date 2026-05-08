@@ -38,12 +38,18 @@ const Dashboard = () => {
       const res = await fetch('http://localhost:8000/todos', {
         headers: { Authorization: `Bearer ${token}` }
       });
+      if (res.status === 401) {
+      console.error("Token invalid or expired. Redirecting...");
+      logout(); 
+      return;
+        }
+        if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
       setTodos(data.reverse()); 
     } catch (err) {
       console.error("Fetch error:", err);
     } finally {
-      setTimeout(() => setIsLoading(false), 400);
+      setTimeout(() => setIsLoading(false), 800);
     }
   };
 
