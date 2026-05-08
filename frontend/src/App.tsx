@@ -4,14 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Register from './pages/Register';
-
-// Temporary placeholder 
-const DashboardPlaceholder = () => (
-  <div className="p-8">
-    <h1 className="text-2xl font-bold">Dashboard (Protected)</h1>
-    <button onClick={() => localStorage.removeItem('token')} className="mt-4 text-red-500">Force Logout (Test)</button>
-  </div>
-);
+import Dashboard from './pages/Dashboard';
 
 const App: React.FC = () => {
   return (
@@ -23,7 +16,7 @@ const App: React.FC = () => {
           
           {/* Protected Routes Wrapper */}
           <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<DashboardPlaceholder />} />
+            <Route path="/" element={<Dashboard />} />
           </Route>
 
           {/* Fallback */}
